@@ -60,6 +60,7 @@ const en: SidebarItem[] = [
         ]
       },
       { text: "Experiments", link: "/docs/experiments" },
+      { text: "MCP Server", link: "/docs/mcp-server" },
       {
         text: "Using Atlantis",
         collapsed: true,

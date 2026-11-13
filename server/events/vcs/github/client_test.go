@@ -2422,3 +2422,39 @@ func TestClient_SecondaryRateLimitHandling_CreateComment(t *testing.T) {
 	Assert(t, calls > maxCalls, "Expected more than %d calls due to rate limiting, but got %d", maxCalls, calls)
 
 }
+
+func TestClient_GetUserRepoPermission(t *testing.T) {
+	logger := logging.NewNoopLogger(t)
+	testServer := httptest.NewTLSServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.RequestURI {
+			case "/api/v3/repos/owner/repo/collaborators/writer/permission":
+				w.Write([]byte(`{"permission":"write","role_name":"maintain","user":{"login":"writer"}}`)) // nolint: errcheck
+			case "/api/v3/repos/owner/repo/collaborators/outsider/permission":
+				w.Write([]byte(`{"permission":"none","role_name":"none","user":{"login":"outsider"}}`)) // nolint: errcheck
+			default:
+				http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+			}
+		}))
+	defer testServer.Close()
+
+	testServerURL, err := url.Parse(testServer.URL)
+	Ok(t, err)
+	client, err := github.New(testServerURL.Host, &github.UserCredentials{"user", "pass", ""}, github.Config{}, 0, logger)
+	Ok(t, err)
+	defer disableSSLVerification()()
+	repo := models.Repo{FullName: "owner/repo", Owner: "owner", Name: "repo"}
+
+	level, err := client.GetUserRepoPermission(logger, repo, "writer")
+	Ok(t, err)
+	Equals(t, "write", level)
+
+	level, err = client.GetUserRepoPermission(logger, repo, "outsider")
+	Ok(t, err)
+	Equals(t, "none", level)
+
+	// An error must not be mistaken for a permission level.
+	level, err = client.GetUserRepoPermission(logger, repo, "ghost")
+	Assert(t, err != nil, "expected an error for an unknown user")
+	Equals(t, "", level)
+}

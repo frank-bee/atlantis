@@ -1337,3 +1337,19 @@ func (g *Client) GetPullLabels(logger logging.SimpleLogging, repo models.Repo, p
 
 	return labels, nil
 }
+
+// GetUserRepoPermission returns the permission level the user has on the
+// repository: "admin", "write", "read" or "none". GitHub reports the maintain
+// role as "write" and the triage role as "read" here.
+// https://docs.github.com/en/rest/collaborators/collaborators#get-repository-permissions-for-a-user
+func (g *Client) GetUserRepoPermission(logger logging.SimpleLogging, repo models.Repo, username string) (string, error) {
+	logger.Debug("Getting GitHub repository permission of user %q on %q", username, repo.FullName)
+	level, resp, err := g.client.Repositories.GetPermissionLevel(g.ctx, repo.Owner, repo.Name, username)
+	if resp != nil {
+		logger.Debug("GET /repos/%v/%v/collaborators/%v/permission returned: %v", repo.Owner, repo.Name, username, resp.StatusCode)
+	}
+	if err != nil {
+		return "", fmt.Errorf("getting repository permission: %w", err)
+	}
+	return level.GetPermission(), nil
+}

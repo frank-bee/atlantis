@@ -86,6 +86,12 @@ const (
 	EnableProfilingAPI               = "enable-profiling-api"
 	ExecutableName                   = "executable-name"
 	ExperimentsFlag                  = "experiments"
+	MCPEnabledFlag                   = "mcp-enabled"
+	MCPReadOnlyFlag                  = "mcp-read-only"
+	MCPTokenSecretFlag               = "mcp-token-secret"    // nolint: gosec
+	MCPTokenTTLHoursFlag             = "mcp-token-ttl-hours" // nolint: gosec
+	MCPGithubOAuthClientIDFlag       = "mcp-gh-oauth-client-id"
+	MCPGithubOAuthClientSecretFlag   = "mcp-gh-oauth-client-secret" // nolint: gosec
 	FailOnPreWorkflowHookError       = "fail-on-pre-workflow-hook-error"
 	HideUnchangedPlanComments        = "hide-unchanged-plan-comments"
 	GHHostnameFlag                   = "gh-hostname"
@@ -192,6 +198,7 @@ const (
 	DefaultLogLevel                     = "info"
 	DefaultIgnoreVCSStatusNames         = ""
 	DefaultMaxCommentsPerCommand        = 100
+	DefaultMCPTokenTTLHours             = 168
 	DefaultParallelPoolSize             = 15
 	DefaultStatsNamespace               = "atlantis"
 	DefaultPort                         = 4141
@@ -423,6 +430,16 @@ var stringFlags = map[string]stringFlag{
 	},
 	APISecretFlag: {
 		description: "Secret used to validate requests made to the /api/* endpoints. Requires the api or drift-detection experiment for the corresponding routes.",
+	},
+	MCPTokenSecretFlag: {
+		description: "Secret that signs the personal tokens of the experimental MCP server. At least 32 characters. Anyone who knows it can act as any user, and changing it revokes every issued token. " +
+			"Should be specified via the ATLANTIS_MCP_TOKEN_SECRET environment variable.",
+	},
+	MCPGithubOAuthClientIDFlag: {
+		description: "Client ID of the GitHub OAuth App or GitHub App that users log in with to get a personal MCP token. Its callback URL must be <atlantis-url>/auth/github/callback.",
+	},
+	MCPGithubOAuthClientSecretFlag: {
+		description: "Client secret belonging to --" + MCPGithubOAuthClientIDFlag + ". Should be specified via the ATLANTIS_MCP_GH_OAUTH_CLIENT_SECRET environment variable.",
 	},
 	LockingDBType: {
 		description:  "The locking database type to use for storing plan and apply locks.",
@@ -699,6 +716,14 @@ var boolFlags = map[string]boolFlag{
 		description:  "Enable drift detection API endpoints. Requires --experiments=drift-detection and --api-secret. Detection does not apply, but can run plan hooks and custom plan commands.",
 		defaultValue: false,
 	},
+	MCPEnabledFlag: {
+		description:  "Enable the experimental MCP server at /api/mcp. Requires --experiments=mcp, --" + MCPTokenSecretFlag + " and the GitHub OAuth client settings.",
+		defaultValue: false,
+	},
+	MCPReadOnlyFlag: {
+		description:  "Serve only the read-only MCP tools. Set to false to also offer plan, apply and unlock, which run as the token's user with the same permissions and requirements as pull request comments.",
+		defaultValue: true,
+	},
 	EnableDriftRemediationFlag: {
 		description:  "Enable drift remediation apply API actions. Requires --experiments=drift-detection, --api-secret, and --enable-drift-detection.",
 		defaultValue: false,
@@ -718,6 +743,10 @@ var intFlags = map[string]intFlag{
 			" How many commits to include in each of base and feature branches when cloning repository." +
 			" If merge base is further behind than this number of commits from any of branches heads, full fetch will be performed.",
 		defaultValue: DefaultCheckoutDepth,
+	},
+	MCPTokenTTLHoursFlag: {
+		description:  "Lifetime in hours of a personal MCP token. A token cannot be revoked individually before it expires.",
+		defaultValue: DefaultMCPTokenTTLHours,
 	},
 	MaxCommentsPerCommand: {
 		description:  "If non-zero, the maximum number of comments to split command output into before truncating.",
@@ -1045,6 +1074,9 @@ func (s *ServerCmd) setDefaults(c *server.UserConfig, v *viper.Viper) {
 	}
 	if !v.IsSet("max-comments-per-command") {
 		c.MaxCommentsPerCommand = DefaultMaxCommentsPerCommand
+	}
+	if c.MCPTokenTTLHours == 0 {
+		c.MCPTokenTTLHours = DefaultMCPTokenTTLHours
 	}
 	if c.ParallelPoolSize == 0 {
 		c.ParallelPoolSize = DefaultParallelPoolSize

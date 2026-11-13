@@ -42,6 +42,8 @@ func (l *RequestLogger) ServeHTTP(rw http.ResponseWriter, r *http.Request, next 
 		r.URL.Path == "/healthz" ||
 		r.URL.Path == "/readyz" ||
 		r.URL.Path == "/status" ||
+		// The MCP token login authenticates the user against GitHub itself.
+		strings.HasPrefix(r.URL.Path, "/auth/github/") ||
 		strings.HasPrefix(r.URL.Path, "/api/") {
 		allowed = true
 	} else {

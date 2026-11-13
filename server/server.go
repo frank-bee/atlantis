@@ -68,6 +68,7 @@ import (
 	"github.com/runatlantis/atlantis/server/events/webhooks"
 	"github.com/runatlantis/atlantis/server/i18n"
 	"github.com/runatlantis/atlantis/server/logging"
+	"github.com/runatlantis/atlantis/server/mcp"
 )
 
 const (
@@ -129,6 +130,12 @@ type Server struct {
 	EnableProfilingAPI             bool
 	Experiments                    []string
 	database                       db.Database
+
+	// MCPHandler, MCPLogin and MCPService are nil unless the experimental MCP
+	// server is enabled.
+	MCPHandler http.Handler
+	MCPLogin   *mcp.LoginController
+	MCPService *mcp.Service
 }
 
 // Config holds config for server that isn't passed in by the user.
@@ -183,6 +190,9 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 
 	var supportedVCSHosts []models.VCSHostType
 	var githubClient github.IGithubClient
+	// mcpGithubClient is the uninstrumented client, which has the repository
+	// permission lookup that only the MCP server needs.
+	var mcpGithubClient *github.Client
 	var githubAppEnabled bool
 	var githubConfig github.Config
 	var githubCredentials github.Credentials
@@ -271,6 +281,7 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 			return nil, err
 		}
 
+		mcpGithubClient = rawGithubClient
 		githubClient = github.NewInstrumentedGithubClient(rawGithubClient, statsScope, logger)
 	}
 	if userConfig.GitlabUser != "" {
@@ -1191,6 +1202,37 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 		database:                       database,
 	}
 
+	if userConfig.MCPEnabled {
+		signer, err := mcp.NewTokenSigner(userConfig.MCPTokenSecret, time.Duration(userConfig.MCPTokenTTLHours)*time.Hour)
+		if err != nil {
+			return nil, fmt.Errorf("configuring mcp: %w", err)
+		}
+		if mcpGithubClient == nil {
+			return nil, errors.New("configuring mcp: the mcp server currently supports GitHub only")
+		}
+		// Job output is unavailable when log streaming is off; the tools say so.
+		jobOutput, _ := projectCmdOutputHandler.(mcp.JobOutputReader)
+		server.MCPService = &mcp.Service{
+			Logger:         logger,
+			CommandRunner:  commandRunner,
+			CommentParser:  commentParser,
+			RepoResolver:   &mcp.GithubRepoResolver{Logger: logger, VCSClient: vcsClient, Parser: eventParser},
+			PullFetcher:    &mcp.GithubPullFetcher{Logger: logger, Getter: githubClient, Parser: eventParser},
+			Permissions:    mcpGithubClient,
+			Commenter:      vcsClient,
+			RepoAllowlist:  repoAllowlist,
+			StatusStore:    database,
+			Jobs:           jobOutput,
+			VCSHostType:    models.Github,
+			ExecutableName: userConfig.ExecutableName,
+			ReadOnly:       userConfig.MCPReadOnly,
+		}
+		server.MCPHandler = mcp.NewHandler(server.MCPService, signer, config.AtlantisVersion)
+		server.MCPLogin = mcp.NewGithubLoginController(logger, signer, userConfig.GithubHostname, github.APIURL(userConfig.GithubHostname),
+			userConfig.MCPGithubOAuthClientID, userConfig.MCPGithubOAuthClientSecret, parsedURL)
+		logger.Info("experimental MCP server enabled at %s (read-only: %t)", mcp.EndpointPath, userConfig.MCPReadOnly)
+	}
+
 	validate := validator.New(validator.WithRequiredStructEnabled())
 
 	err = validate.Struct(server)
@@ -1223,6 +1265,11 @@ func (s *Server) SetupRoutes() {
 		s.Router.HandleFunc("/api/drift/remediate/{id}", s.APIController.GetRemediationResult).Methods("GET")
 		s.Router.HandleFunc("/api/drift/remediate", s.APIController.ListRemediationResults).Methods("GET")
 		s.Router.HandleFunc("/api/drift/remediate", s.APIController.Remediate).Methods("POST")
+	}
+	if s.MCPHandler != nil && s.MCPLogin != nil && slices.Contains(s.Experiments, mcpExperiment) {
+		s.Router.Handle(mcp.EndpointPath, s.MCPHandler)
+		s.Router.HandleFunc(mcp.LoginPath, s.MCPLogin.Login).Methods("GET")
+		s.Router.HandleFunc(mcp.CallbackPath, s.MCPLogin.Callback).Methods("GET")
 	}
 	s.Router.HandleFunc("/github-app/exchange-code", s.GithubAppController.ExchangeCode).Methods("GET")
 	s.Router.HandleFunc("/github-app/setup", s.GithubAppController.New).Methods("GET")
@@ -1299,6 +1346,11 @@ func (s *Server) Start() error {
 	<-stop
 
 	s.Logger.Warn("Received interrupt. Waiting for in-progress operations to complete")
+	if s.MCPService != nil {
+		// Release MCP calls that are waiting on a command so they do not hold
+		// their connections open through the shutdown.
+		s.MCPService.Shutdown()
+	}
 	s.waitForDrain()
 
 	// flush stats before shutdown

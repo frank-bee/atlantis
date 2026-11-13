@@ -85,6 +85,12 @@ func TestRequestLogger_WebAuthentication(t *testing.T) {
 			expNextHandler: true,
 		},
 		{
+			name:           "mcp token login authenticates against GitHub instead",
+			path:           "/auth/github/login",
+			expStatus:      http.StatusNoContent,
+			expNextHandler: true,
+		},
+		{
 			name:           "root remains protected",
 			path:           "/",
 			expStatus:      http.StatusUnauthorized,

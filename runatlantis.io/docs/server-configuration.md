@@ -1260,6 +1260,74 @@ Limit the number of comments published after a command is executed, to prevent s
 
 When command output exceeds the VCS comment size limit (or when this limit applies), Atlantis splits the output into multiple comments using **intelligent comment splitting**. Split points are chosen so that markdown structure is preserved: the splitter detects whether it is inside a code block (`` ``` ``), a `<details>` block, or inline code (`` ` ``), and inserts appropriate closing and continuation markers so that each comment renders correctly. Continuation comments are labeled with the command name (e.g. "Continued plan output from previous comment") when available.
 
+### `--mcp-enabled` <Badge text="Experimental" type="warning"/>
+
+```bash
+atlantis server --mcp-enabled
+# or
+ATLANTIS_MCP_ENABLED=true
+```
+
+Enable the [MCP server](mcp-server.md) at `/api/mcp` and the token login at `/auth/github/login`. Defaults to `false`.
+
+Requires `mcp` in `experiments`, [`--mcp-token-secret`](#mcp-token-secret), [`--mcp-gh-oauth-client-id`](#mcp-gh-oauth-client-id) and [`--mcp-gh-oauth-client-secret`](#mcp-gh-oauth-client-secret); otherwise, startup fails. Currently GitHub only.
+
+### `--mcp-gh-oauth-client-id` <Badge text="Experimental" type="warning"/>
+
+```bash
+atlantis server --mcp-gh-oauth-client-id="Ov23li..."
+# or
+ATLANTIS_MCP_GH_OAUTH_CLIENT_ID="Ov23li..."
+```
+
+Client ID of the GitHub OAuth App or GitHub App that users log in with to get a personal [MCP](mcp-server.md) token. Its authorization callback URL must be `<atlantis-url>/auth/github/callback`.
+
+### `--mcp-gh-oauth-client-secret` <Badge text="Experimental" type="warning"/>
+
+```bash
+atlantis server --mcp-gh-oauth-client-secret="secret"
+# or (recommended)
+ATLANTIS_MCP_GH_OAUTH_CLIENT_SECRET="secret"
+```
+
+Client secret belonging to [`--mcp-gh-oauth-client-id`](#mcp-gh-oauth-client-id).
+
+### `--mcp-read-only` <Badge text="Experimental" type="warning"/>
+
+```bash
+atlantis server --mcp-read-only=false
+# or
+ATLANTIS_MCP_READ_ONLY=false
+```
+
+Serve only the read-only [MCP](mcp-server.md) tools. Defaults to `true`.
+
+Set to `false` to also offer `atlantis_plan`, `atlantis_apply` and `atlantis_unlock`. These run as the token's user, with the same team allowlist, command requirements and locks as pull request comments. Read the [security notes](mcp-server.md#security) first.
+
+### `--mcp-token-secret` <Badge text="Experimental" type="warning"/>
+
+```bash
+atlantis server --mcp-token-secret="secret"
+# or (recommended)
+ATLANTIS_MCP_TOKEN_SECRET="secret"
+```
+
+Secret that signs personal [MCP](mcp-server.md) tokens. At least 32 characters.
+
+::: warning
+Anyone who knows this secret can create a token for any user. Changing it revokes every issued token.
+:::
+
+### `--mcp-token-ttl-hours` <Badge text="Experimental" type="warning"/>
+
+```bash
+atlantis server --mcp-token-ttl-hours=24
+# or
+ATLANTIS_MCP_TOKEN_TTL_HOURS=24
+```
+
+Lifetime of a personal [MCP](mcp-server.md) token in hours. Defaults to `168`. A token cannot be revoked individually before it expires.
+
 ### `--parallel-apply`
 
 ```bash

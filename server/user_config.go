@@ -86,6 +86,12 @@ type UserConfig struct {
 	GitlabStatusRetryEnabled        bool   `mapstructure:"gitlab-status-retry-enabled"`
 	IncludeGitUntrackedFiles        bool   `mapstructure:"include-git-untracked-files"`
 	APISecret                       string `mapstructure:"api-secret"`
+	MCPEnabled                      bool   `mapstructure:"mcp-enabled"`
+	MCPReadOnly                     bool   `mapstructure:"mcp-read-only"`
+	MCPTokenSecret                  string `mapstructure:"mcp-token-secret"`
+	MCPTokenTTLHours                int    `mapstructure:"mcp-token-ttl-hours"`
+	MCPGithubOAuthClientID          string `mapstructure:"mcp-gh-oauth-client-id"`
+	MCPGithubOAuthClientSecret      string `mapstructure:"mcp-gh-oauth-client-secret"`
 	HidePrevPlanComments            bool   `mapstructure:"hide-prev-plan-comments"`
 	LockingDBType                   string `mapstructure:"locking-db-type"`
 	LogLevel                        string `mapstructure:"log-level"`

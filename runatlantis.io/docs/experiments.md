@@ -39,7 +39,9 @@ Names are lowercase and match exactly. Unknown names, wildcard values, `all`, an
 | [API](api-endpoints.md#main-endpoints) | `api` | Experimental | Plan/apply: v0.19.8+. Experiment gate: unreleased (Main only). | Requires `api`; authenticated commands also require `api-secret` | [ADR 0002](/contributing/adr/0002-api-enhancement-drift-detection.md) | [API development #6162](https://github.com/runatlantis/atlantis/issues/6162) |
 | [Drift detection](api-endpoints.md#drift-detection-and-remediation-alpha) | `drift-detection` | Experimental | Legacy API: v0.45.0+. Experiment gate: unreleased (Main only). | Requires `drift-detection`, `api-secret`, and drift enable flags | [ADR 0002](/contributing/adr/0002-api-enhancement-drift-detection.md) | [Development #7033](https://github.com/runatlantis/atlantis/issues/7033) |
 
-The supported names are `api` and `drift-detection`. Each permits its own route group and does not grant the other permission. No current release tag contains this setting.
+| [MCP server](mcp-server.md) | `mcp` | Experimental | Unreleased (Main only). | Requires `mcp`, `mcp-enabled`, `mcp-token-secret`, and a GitHub OAuth client | Pending, see tracking issue | [MCP server #6530](https://github.com/runatlantis/atlantis/issues/6530) |
+
+The supported names are `api`, `drift-detection`, and `mcp`. Each permits its own route group and does not grant the other permissions. No current release tag contains this setting.
 
 Both experiments share ADR 0002, but have separate tracking issues and graduation criteria. Graduating either one does not make the other stable.
 
@@ -101,3 +103,23 @@ Results currently use in-memory storage and are lost on restart. Drift detection
 - [ ] Record the graduation decision and first stable release in [development tracker #7033](https://github.com/runatlantis/atlantis/issues/7033).
 
 See the [feature lifecycle ADR](/contributing/adr/0004-govern-feature-lifecycles.md) for the lifecycle policy and graduation requirements.
+
+## MCP server
+
+The `mcp` experiment covers the [MCP endpoint](mcp-server.md) at `/api/mcp` and the token login at `/auth/github/login`. It is independent of the `api` experiment and does not use `api-secret`: callers authenticate with personal tokens, and commands run as the token's user through the pull request comment path.
+
+Add `mcp` to `experiments`, enable [`mcp-enabled`](server-configuration.md#mcp-enabled), and configure [`mcp-token-secret`](server-configuration.md#mcp-token-secret) and the GitHub OAuth client settings. Missing permission or prerequisites prevent startup when `mcp-enabled` is set. Permission alone enables nothing. The server offers only read-only tools unless [`mcp-read-only`](server-configuration.md#mcp-read-only) is `false`.
+
+Tool names, inputs and outputs, the token format, and the login flow remain experimental. Only GitHub is supported.
+
+To disable the MCP server, disable `mcp-enabled`, remove `mcp` from `experiments`, and restart. Its routes then return HTTP 404 and issued tokens stop working. Nothing is persisted, so there is no state to clean up. Remove the server from your MCP clients' configuration.
+
+### MCP server graduation checklist
+
+- [ ] Accept an ADR for the MCP server and its authentication model. Tracking: [MCP server #6530](https://github.com/runatlantis/atlantis/issues/6530).
+- [ ] Require MCP permission for its routes and reject settings without permission or prerequisites at startup. Evidence: `server/experiments_test.go`.
+- [ ] Verify that commands run as the token's user through the comment path, with repository permission checked on every call. Evidence: `server/mcp/service_internal_test.go`.
+- [ ] Verify that a read-only server does not register command tools and that the endpoint holds no stream open across shutdown. Evidence: `server/mcp/server_internal_test.go`.
+- [ ] Decide whether tokens need individual revocation, which requires durable storage.
+- [ ] Support the remaining VCS providers or document GitHub as the supported scope.
+- [ ] Review tool names and result schemas for compatibility guarantees.

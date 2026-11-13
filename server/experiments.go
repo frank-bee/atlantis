@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/runatlantis/atlantis/server/mcp"
 )
 
 // ExperimentsDocumentationURL includes experiments not yet in a stable release.
@@ -15,9 +17,10 @@ const ExperimentsDocumentationURL = "https://www.runatlantis.io/versions/main/do
 const (
 	apiExperiment   = "api"
 	driftExperiment = "drift-detection"
+	mcpExperiment   = "mcp"
 )
 
-var knownExperiments = []string{apiExperiment, driftExperiment}
+var knownExperiments = []string{apiExperiment, driftExperiment, mcpExperiment}
 
 // ValidateExperiments checks permissions and prerequisites before startup.
 func (c UserConfig) ValidateExperiments() error {
@@ -43,11 +46,37 @@ func (c UserConfig) ValidateExperiments() error {
 	if c.APISecret != "" && !api && !drift {
 		return fmt.Errorf("api-secret requires the %q experiment for command/lock endpoints or %q for drift endpoints; add the matching name to experiments or remove api-secret; see %s", apiExperiment, driftExperiment, ExperimentsDocumentationURL)
 	}
+	if err := c.validateMCP(); err != nil {
+		return err
+	}
 	if c.EnableDriftRemediation && !c.EnableDriftDetection {
 		return fmt.Errorf("--enable-drift-remediation requires --enable-drift-detection; see %s", ExperimentsDocumentationURL)
 	}
 	if c.EnableDriftDetection && c.APISecret == "" {
 		return fmt.Errorf("enable-drift-detection requires api-secret for authentication; configure api-secret or disable enable-drift-detection; see %s", ExperimentsDocumentationURL)
+	}
+	return nil
+}
+
+// validateMCP checks the prerequisites of the experimental MCP server.
+func (c UserConfig) validateMCP() error {
+	if !c.MCPEnabled {
+		return nil
+	}
+	if !slices.Contains(c.Experiments, mcpExperiment) {
+		return fmt.Errorf("mcp-enabled requires the %q experiment; add it to experiments or disable mcp-enabled; see %s", mcpExperiment, ExperimentsDocumentationURL)
+	}
+	if len(c.MCPTokenSecret) < mcp.MinTokenSecretLength {
+		return fmt.Errorf("mcp-enabled requires mcp-token-secret with at least %d characters; configure it or disable mcp-enabled; see %s", mcp.MinTokenSecretLength, ExperimentsDocumentationURL)
+	}
+	if c.MCPTokenTTLHours < 1 {
+		return fmt.Errorf("mcp-token-ttl-hours must be at least 1; see %s", ExperimentsDocumentationURL)
+	}
+	if c.MCPGithubOAuthClientID == "" || c.MCPGithubOAuthClientSecret == "" {
+		return fmt.Errorf("mcp-enabled requires mcp-gh-oauth-client-id and mcp-gh-oauth-client-secret, which users log in with to get a token; configure them or disable mcp-enabled; see %s", ExperimentsDocumentationURL)
+	}
+	if c.GithubUser == "" && c.GithubAppID == 0 {
+		return fmt.Errorf("mcp-enabled currently supports GitHub only and requires gh-user or gh-app-id; see %s", ExperimentsDocumentationURL)
 	}
 	return nil
 }

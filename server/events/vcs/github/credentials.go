@@ -323,3 +323,9 @@ func resolveGraphQLURL(hostname string) string {
 	}
 	return fmt.Sprintf("https://%s/api/graphql", apiURL.Host)
 }
+
+// APIURL returns the REST API base URL for the given GitHub hostname. See
+// resolveGithubAPIURL for the mapping.
+func APIURL(hostname string) *url.URL {
+	return resolveGithubAPIURL(hostname)
+}

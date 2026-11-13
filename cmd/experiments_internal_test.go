@@ -92,7 +92,7 @@ func TestExecute_Experiments(t *testing.T) {
 			if tc.err != "" {
 				ErrContains(t, tc.err, err)
 				if strings.Contains(tc.err, "unknown server experiment") {
-					ErrContains(t, "supported names are api, drift-detection", err)
+					ErrContains(t, "supported names are api, drift-detection, mcp", err)
 				}
 				ErrContains(t, "https://www.runatlantis.io/versions/main/docs/experiments.html", err)
 				Assert(t, !strings.Contains(err.Error(), "in --experiments"), "error assumes the setting came from a flag")
