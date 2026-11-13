@@ -60,6 +60,8 @@ var testFlags = map[string]any{
 	BlockedExtraArgsFlag:             "-no-color,-lock-timeout",
 	AllowForkPRsFlag:                 true,
 	APISecretFlag:                    "api-secret",
+	MCPAccessTokenTTLHoursFlag:       2,
+	MCPRefreshTokenTTLHoursFlag:      480,
 	MCPEnabledFlag:                   true,
 	MCPReadOnlyFlag:                  false,
 	MCPTokenSecretFlag:               "0123456789abcdef0123456789abcdef",

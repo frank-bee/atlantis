@@ -136,6 +136,7 @@ type Server struct {
 	MCPHandler http.Handler
 	MCPLogin   *mcp.LoginController
 	MCPService *mcp.Service
+	MCPOAuth   *mcp.OAuthController
 }
 
 // Config holds config for server that isn't passed in by the user.
@@ -1227,9 +1228,15 @@ func NewServer(userConfig UserConfig, config Config) (*Server, error) {
 			ExecutableName: userConfig.ExecutableName,
 			ReadOnly:       userConfig.MCPReadOnly,
 		}
-		server.MCPHandler = mcp.NewHandler(server.MCPService, signer, config.AtlantisVersion)
 		server.MCPLogin = mcp.NewGithubLoginController(logger, signer, userConfig.GithubHostname, github.APIURL(userConfig.GithubHostname),
 			userConfig.MCPGithubOAuthClientID, userConfig.MCPGithubOAuthClientSecret, parsedURL)
+		server.MCPOAuth, err = mcp.NewOAuthController(server.MCPLogin,
+			time.Duration(userConfig.MCPAccessTokenTTLHours)*time.Hour,
+			time.Duration(userConfig.MCPRefreshTokenTTLHours)*time.Hour)
+		if err != nil {
+			return nil, fmt.Errorf("configuring mcp oauth: %w", err)
+		}
+		server.MCPHandler = mcp.NewHandler(server.MCPService, signer, config.AtlantisVersion, server.MCPOAuth.ResourceURL())
 		logger.Info("experimental MCP server enabled at %s (read-only: %t)", mcp.EndpointPath, userConfig.MCPReadOnly)
 	}
 
@@ -1270,6 +1277,14 @@ func (s *Server) SetupRoutes() {
 		s.Router.Handle(mcp.EndpointPath, s.MCPHandler)
 		s.Router.HandleFunc(mcp.LoginPath, s.MCPLogin.Login).Methods("GET")
 		s.Router.HandleFunc(mcp.CallbackPath, s.MCPLogin.Callback).Methods("GET")
+		if s.MCPOAuth != nil {
+			for _, path := range s.MCPOAuth.DiscoveryPaths() {
+				s.Router.Handle(path, s.MCPOAuth.DiscoveryHandler(path)).Methods("GET", "OPTIONS")
+			}
+			s.Router.HandleFunc(mcp.RegisterPath, s.MCPOAuth.Register).Methods("POST")
+			s.Router.HandleFunc(mcp.AuthorizePath, s.MCPOAuth.Authorize).Methods("GET", "POST")
+			s.Router.HandleFunc(mcp.TokenPath, s.MCPOAuth.Token).Methods("POST")
+		}
 	}
 	s.Router.HandleFunc("/github-app/exchange-code", s.GithubAppController.ExchangeCode).Methods("GET")
 	s.Router.HandleFunc("/github-app/setup", s.GithubAppController.New).Methods("GET")

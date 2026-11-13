@@ -86,6 +86,8 @@ type UserConfig struct {
 	GitlabStatusRetryEnabled        bool   `mapstructure:"gitlab-status-retry-enabled"`
 	IncludeGitUntrackedFiles        bool   `mapstructure:"include-git-untracked-files"`
 	APISecret                       string `mapstructure:"api-secret"`
+	MCPAccessTokenTTLHours          int    `mapstructure:"mcp-access-token-ttl-hours"`
+	MCPRefreshTokenTTLHours         int    `mapstructure:"mcp-refresh-token-ttl-hours"`
 	MCPEnabled                      bool   `mapstructure:"mcp-enabled"`
 	MCPReadOnly                     bool   `mapstructure:"mcp-read-only"`
 	MCPTokenSecret                  string `mapstructure:"mcp-token-secret"`

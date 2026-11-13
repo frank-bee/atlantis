@@ -42,6 +42,7 @@ const (
 type LoginController struct {
 	Logger logging.SimpleLogging
 	Signer *TokenSigner
+	OAuth  *OAuthController
 	// ClientID and ClientSecret belong to a GitHub OAuth App or GitHub App
 	// whose callback URL is AtlantisURL + CallbackPath.
 	ClientID     string
@@ -88,6 +89,10 @@ func (c *LoginController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := hex.EncodeToString(raw)
+	c.startLogin(w, r, state)
+}
+
+func (c *LoginController) startLogin(w http.ResponseWriter, r *http.Request, state string) {
 	c.setStateCookie(w, state, int(stateLifetime.Seconds()))
 	q := url.Values{}
 	q.Set("client_id", c.ClientID)
@@ -124,6 +129,15 @@ func (c *LoginController) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 	// The state is single use.
 	c.setStateCookie(w, "", -1)
+
+	if strings.HasPrefix(state, "mcp_") {
+		if c.OAuth == nil {
+			http.Error(w, "oauth is unavailable", http.StatusBadRequest)
+			return
+		}
+		c.OAuth.callback(w, r, state)
+		return
+	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
@@ -250,6 +264,7 @@ pre { background: #f4f4f4; color: #111; padding: 1rem; overflow-x: auto; white-s
 <p>Signed in as <strong>{{.Username}}</strong>. This token lets an MCP client run Atlantis commands as you. It expires on {{.Expires}}.</p>
 <pre>{{.Token}}</pre>
 <p class="warn">It is shown only once and cannot be revoked individually. Treat it like a password. Sign in again to get a new one.</p>
+<p>Clients supporting MCP OAuth need no personal token. Connect to the endpoint below and follow the client’s browser login.</p>
 <h2>MCP endpoint</h2>
 <pre>{{.Endpoint}}</pre>
 <p>Send the token as <code>Authorization: Bearer &lt;token&gt;</code>. For example, with Claude Code:</p>

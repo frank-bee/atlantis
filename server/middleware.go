@@ -8,34 +8,46 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/runatlantis/atlantis/server/logging"
+	"github.com/runatlantis/atlantis/server/mcp"
 	"github.com/urfave/negroni/v3"
 )
 
 // NewRequestLogger creates a RequestLogger.
 func NewRequestLogger(s *Server) *RequestLogger {
-	return &RequestLogger{
-		s.Logger,
-		s.WebAuthentication,
-		s.WebUsername,
-		s.WebPassword,
+	l := &RequestLogger{
+		logger:            s.Logger,
+		WebAuthentication: s.WebAuthentication,
+		WebUsername:       s.WebUsername,
+		WebPassword:       s.WebPassword,
 	}
+	if s.MCPOAuth != nil {
+		l.oauthDiscoveryPaths = s.MCPOAuth.DiscoveryPaths()
+	}
+	return l
 }
 
 // RequestLogger logs requests and their response codes.
 // as well as handle the basicauth on the requests
 type RequestLogger struct {
-	logger            logging.SimpleLogging
-	WebAuthentication bool
-	WebUsername       string
-	WebPassword       string
+	logger              logging.SimpleLogging
+	oauthDiscoveryPaths []string
+	WebAuthentication   bool
+	WebUsername         string
+	WebPassword         string
 }
 
 // ServeHTTP implements the middleware function. It logs all requests at DEBUG level.
 func (l *RequestLogger) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	l.logger.Debug("%s %s – from %s", r.Method, r.URL.RequestURI(), r.RemoteAddr)
+	requestURI := r.URL.RequestURI()
+	if strings.HasPrefix(r.URL.Path, "/auth/github/") || r.URL.Path == mcp.AuthorizePath || r.URL.Path == mcp.TokenPath {
+		// OAuth query parameters can carry codes and browser state.
+		requestURI = r.URL.Path
+	}
+	l.logger.Debug("%s %s – from %s", r.Method, requestURI, r.RemoteAddr)
 	allowed := false
 	if !l.WebAuthentication ||
 		r.URL.Path == "/events" ||
@@ -44,6 +56,13 @@ func (l *RequestLogger) ServeHTTP(rw http.ResponseWriter, r *http.Request, next 
 		r.URL.Path == "/status" ||
 		// The MCP token login authenticates the user against GitHub itself.
 		strings.HasPrefix(r.URL.Path, "/auth/github/") ||
+		slices.Contains(l.oauthDiscoveryPaths, r.URL.Path) ||
+		r.URL.Path == mcp.ResourceMetadataPath ||
+		r.URL.Path == mcp.ResourceMetadataPath+mcp.EndpointPath ||
+		r.URL.Path == mcp.AuthorizationMetadataPath ||
+		r.URL.Path == mcp.RegisterPath ||
+		r.URL.Path == mcp.AuthorizePath ||
+		r.URL.Path == mcp.TokenPath ||
 		strings.HasPrefix(r.URL.Path, "/api/") {
 		allowed = true
 	} else {
@@ -51,11 +70,11 @@ func (l *RequestLogger) ServeHTTP(rw http.ResponseWriter, r *http.Request, next 
 		if ok {
 			r.SetBasicAuth(user, pass)
 			if l.credentialsMatch(user, pass) {
-				l.logger.Debug("[VALID] log in: >> url: %s", r.URL.RequestURI())
+				l.logger.Debug("[VALID] log in: >> url: %s", requestURI)
 				allowed = true
 			} else {
 				allowed = false
-				l.logger.Info("[INVALID] log in attempt: >> url: %s", r.URL.RequestURI())
+				l.logger.Info("[INVALID] log in attempt: >> url: %s", requestURI)
 			}
 		}
 	}
@@ -65,7 +84,7 @@ func (l *RequestLogger) ServeHTTP(rw http.ResponseWriter, r *http.Request, next 
 	} else {
 		next(rw, r)
 	}
-	l.logger.Debug("%s %s – respond HTTP %d", r.Method, r.URL.RequestURI(), rw.(negroni.ResponseWriter).Status())
+	l.logger.Debug("%s %s – respond HTTP %d", r.Method, requestURI, rw.(negroni.ResponseWriter).Status())
 }
 
 // credentialsMatch reports whether the supplied basic-auth credentials equal

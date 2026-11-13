@@ -26,7 +26,7 @@ Before applying, read the plan and pass the head commit SHA it was made for as e
 // every request is answered with a single JSON response and no stream is kept
 // open, so the handler needs no session store and never delays a server
 // shutdown beyond a single bounded request.
-func NewHandler(svc *Service, signer *TokenSigner, version string) http.Handler {
+func NewHandler(svc *Service, signer *TokenSigner, version, resourceURL string) http.Handler {
 	server := sdk.NewServer(&sdk.Implementation{
 		Name:    "atlantis",
 		Title:   "Atlantis",
@@ -42,7 +42,7 @@ func NewHandler(svc *Service, signer *TokenSigner, version string) http.Handler 
 	})
 
 	verify := func(_ context.Context, token string, _ *http.Request) (*sdkauth.TokenInfo, error) {
-		claims, err := signer.Verify(token)
+		claims, err := signer.verifyBearer(token, resourceURL)
 		if err != nil {
 			return nil, sdkauth.ErrInvalidToken
 		}
@@ -52,7 +52,11 @@ func NewHandler(svc *Service, signer *TokenSigner, version string) http.Handler 
 			Extra:      map[string]any{claimsKey: claims},
 		}, nil
 	}
-	return sdkauth.RequireBearerToken(verify, nil)(handler)
+	opts := &sdkauth.RequireBearerTokenOptions{}
+	if resourceURL != "" {
+		opts.ResourceMetadataURL = resourceMetadataURL(resourceURL)
+	}
+	return sdkauth.RequireBearerToken(verify, opts)(handler)
 }
 
 func registerTools(server *sdk.Server, svc *Service) {

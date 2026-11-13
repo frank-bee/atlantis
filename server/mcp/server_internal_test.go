@@ -28,7 +28,7 @@ func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func connect(t *testing.T, svc *Service, token string) *sdk.ClientSession {
 	t.Helper()
-	srv := httptest.NewServer(NewHandler(svc, newTestSigner(t), "test"))
+	srv := httptest.NewServer(NewHandler(svc, newTestSigner(t), "test", ""))
 	t.Cleanup(srv.Close)
 	client := sdk.NewClient(&sdk.Implementation{Name: "test", Version: "0"}, nil)
 	session, err := client.Connect(context.Background(), &sdk.StreamableClientTransport{
@@ -56,7 +56,7 @@ func toolNames(t *testing.T, session *sdk.ClientSession) []string {
 
 func TestHandler_RejectsMissingOrInvalidToken(t *testing.T) {
 	svc, _ := newTestService(t)
-	srv := httptest.NewServer(NewHandler(svc, newTestSigner(t), "test"))
+	srv := httptest.NewServer(NewHandler(svc, newTestSigner(t), "test", ""))
 	defer srv.Close()
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
@@ -86,7 +86,7 @@ func TestHandler_HoldsNoStreamOpen(t *testing.T) {
 	signer := newTestSigner(t)
 	token, _, err := signer.Issue("octocat", 42)
 	Ok(t, err)
-	srv := httptest.NewServer(NewHandler(svc, signer, "test"))
+	srv := httptest.NewServer(NewHandler(svc, signer, "test", ""))
 	defer srv.Close()
 
 	// A GET would open a long-lived event stream, which would delay a

@@ -1260,6 +1260,16 @@ Limit the number of comments published after a command is executed, to prevent s
 
 When command output exceeds the VCS comment size limit (or when this limit applies), Atlantis splits the output into multiple comments using **intelligent comment splitting**. Split points are chosen so that markdown structure is preserved: the splitter detects whether it is inside a code block (`` ``` ``), a `<details>` block, or inline code (`` ` ``), and inserts appropriate closing and continuation markers so that each comment renders correctly. Continuation comments are labeled with the command name (e.g. "Continued plan output from previous comment") when available.
 
+### `--mcp-access-token-ttl-hours` <Badge text="Experimental" type="warning"/>
+
+```bash
+atlantis server --mcp-access-token-ttl-hours=1
+# or
+ATLANTIS_MCP_ACCESS_TOKEN_TTL_HOURS=1
+```
+
+Lifetime of an OAuth [MCP](mcp-server.md) access token in hours. Defaults to `1`; must be positive. Access tokens are bound to this server's MCP URL. This does not change the lifetime of manually issued personal tokens.
+
 ### `--mcp-enabled` <Badge text="Experimental" type="warning"/>
 
 ```bash
@@ -1268,7 +1278,7 @@ atlantis server --mcp-enabled
 ATLANTIS_MCP_ENABLED=true
 ```
 
-Enable the [MCP server](mcp-server.md) at `/api/mcp` and the token login at `/auth/github/login`. Defaults to `false`.
+Enable the [MCP server](mcp-server.md) at `/api/mcp`, its OAuth discovery and authorization endpoints, and the manual token login at `/auth/github/login`. Defaults to `false`. Native OAuth requires an HTTPS `atlantis-url` (HTTP is permitted only for loopback development).
 
 Requires `mcp` in `experiments`, [`--mcp-token-secret`](#mcp-token-secret), [`--mcp-gh-oauth-client-id`](#mcp-gh-oauth-client-id) and [`--mcp-gh-oauth-client-secret`](#mcp-gh-oauth-client-secret); otherwise, startup fails. Currently GitHub only.
 
@@ -1304,6 +1314,16 @@ Serve only the read-only [MCP](mcp-server.md) tools. Defaults to `true`.
 
 Set to `false` to also offer `atlantis_plan`, `atlantis_apply` and `atlantis_unlock`. These run as the token's user, with the same team allowlist, command requirements and locks as pull request comments. Read the [security notes](mcp-server.md#security) first.
 
+### `--mcp-refresh-token-ttl-hours` <Badge text="Experimental" type="warning"/>
+
+```bash
+atlantis server --mcp-refresh-token-ttl-hours=720
+# or
+ATLANTIS_MCP_REFRESH_TOKEN_TTL_HOURS=720
+```
+
+Absolute lifetime of an OAuth [MCP](mcp-server.md) refresh token family in hours. Defaults to `720` (30 days); must be positive. Tokens rotate on use without extending this lifetime. A server restart invalidates refresh tokens. Native OAuth requires a single Atlantis instance; see [limitations](mcp-server.md#limitations).
+
 ### `--mcp-token-secret` <Badge text="Experimental" type="warning"/>
 
 ```bash
@@ -1312,7 +1332,7 @@ atlantis server --mcp-token-secret="secret"
 ATLANTIS_MCP_TOKEN_SECRET="secret"
 ```
 
-Secret that signs personal [MCP](mcp-server.md) tokens. At least 32 characters.
+Secret that signs personal and OAuth [MCP](mcp-server.md) credentials, including stateless client registrations. At least 32 characters.
 
 ::: warning
 Anyone who knows this secret can create a token for any user. Changing it revokes every issued token.

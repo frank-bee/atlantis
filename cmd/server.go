@@ -86,6 +86,8 @@ const (
 	EnableProfilingAPI               = "enable-profiling-api"
 	ExecutableName                   = "executable-name"
 	ExperimentsFlag                  = "experiments"
+	MCPAccessTokenTTLHoursFlag       = "mcp-access-token-ttl-hours"  // nolint: gosec
+	MCPRefreshTokenTTLHoursFlag      = "mcp-refresh-token-ttl-hours" // nolint: gosec
 	MCPEnabledFlag                   = "mcp-enabled"
 	MCPReadOnlyFlag                  = "mcp-read-only"
 	MCPTokenSecretFlag               = "mcp-token-secret"    // nolint: gosec
@@ -198,6 +200,8 @@ const (
 	DefaultLogLevel                     = "info"
 	DefaultIgnoreVCSStatusNames         = ""
 	DefaultMaxCommentsPerCommand        = 100
+	DefaultMCPAccessTokenTTLHours       = 1
+	DefaultMCPRefreshTokenTTLHours      = 720
 	DefaultMCPTokenTTLHours             = 168
 	DefaultParallelPoolSize             = 15
 	DefaultStatsNamespace               = "atlantis"
@@ -432,11 +436,11 @@ var stringFlags = map[string]stringFlag{
 		description: "Secret used to validate requests made to the /api/* endpoints. Requires the api or drift-detection experiment for the corresponding routes.",
 	},
 	MCPTokenSecretFlag: {
-		description: "Secret that signs the personal tokens of the experimental MCP server. At least 32 characters. Anyone who knows it can act as any user, and changing it revokes every issued token. " +
+		description: "Secret that signs personal tokens and OAuth credentials of the experimental MCP server. At least 32 characters. Anyone who knows it can act as any user, and changing it revokes every issued token. " +
 			"Should be specified via the ATLANTIS_MCP_TOKEN_SECRET environment variable.",
 	},
 	MCPGithubOAuthClientIDFlag: {
-		description: "Client ID of the GitHub OAuth App or GitHub App that users log in with to get a personal MCP token. Its callback URL must be <atlantis-url>/auth/github/callback.",
+		description: "Client ID of the GitHub OAuth App or GitHub App that users log in with to authorize an MCP client or get a personal token. Its callback URL must be <atlantis-url>/auth/github/callback.",
 	},
 	MCPGithubOAuthClientSecretFlag: {
 		description: "Client secret belonging to --" + MCPGithubOAuthClientIDFlag + ". Should be specified via the ATLANTIS_MCP_GH_OAUTH_CLIENT_SECRET environment variable.",
@@ -743,6 +747,14 @@ var intFlags = map[string]intFlag{
 			" How many commits to include in each of base and feature branches when cloning repository." +
 			" If merge base is further behind than this number of commits from any of branches heads, full fetch will be performed.",
 		defaultValue: DefaultCheckoutDepth,
+	},
+	MCPAccessTokenTTLHoursFlag: {
+		description:  "Lifetime in hours of an OAuth MCP access token.",
+		defaultValue: DefaultMCPAccessTokenTTLHours,
+	},
+	MCPRefreshTokenTTLHoursFlag: {
+		description:  "Absolute lifetime in hours of an OAuth MCP refresh token family. Tokens rotate on use without extending this lifetime; restarting the server invalidates them.",
+		defaultValue: DefaultMCPRefreshTokenTTLHours,
 	},
 	MCPTokenTTLHoursFlag: {
 		description:  "Lifetime in hours of a personal MCP token. A token cannot be revoked individually before it expires.",
@@ -1074,6 +1086,12 @@ func (s *ServerCmd) setDefaults(c *server.UserConfig, v *viper.Viper) {
 	}
 	if !v.IsSet("max-comments-per-command") {
 		c.MaxCommentsPerCommand = DefaultMaxCommentsPerCommand
+	}
+	if !v.IsSet(MCPAccessTokenTTLHoursFlag) {
+		c.MCPAccessTokenTTLHours = DefaultMCPAccessTokenTTLHours
+	}
+	if !v.IsSet(MCPRefreshTokenTTLHoursFlag) {
+		c.MCPRefreshTokenTTLHours = DefaultMCPRefreshTokenTTLHours
 	}
 	if c.MCPTokenTTLHours == 0 {
 		c.MCPTokenTTLHours = DefaultMCPTokenTTLHours

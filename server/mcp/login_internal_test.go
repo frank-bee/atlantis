@@ -20,6 +20,15 @@ import (
 func fakeGithub(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
+	mux.HandleFunc("/login/oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
+		target, err := url.Parse(r.URL.Query().Get("redirect_uri"))
+		Ok(t, err)
+		q := target.Query()
+		q.Set("state", r.URL.Query().Get("state"))
+		q.Set("code", "good-code")
+		target.RawQuery = q.Encode()
+		http.Redirect(w, r, target.String(), http.StatusFound) // nolint: gosec // Test-only identity provider redirects to the local test server.
+	})
 	mux.HandleFunc("/login/oauth/access_token", func(w http.ResponseWriter, r *http.Request) {
 		Ok(t, r.ParseForm())
 		w.Header().Set("Content-Type", "application/json")

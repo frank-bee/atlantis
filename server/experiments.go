@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/runatlantis/atlantis/server/mcp"
 )
@@ -71,6 +72,17 @@ func (c UserConfig) validateMCP() error {
 	}
 	if c.MCPTokenTTLHours < 1 {
 		return fmt.Errorf("mcp-token-ttl-hours must be at least 1; see %s", ExperimentsDocumentationURL)
+	}
+	for _, setting := range []struct {
+		name  string
+		hours int
+	}{
+		{"mcp-access-token-ttl-hours", c.MCPAccessTokenTTLHours},
+		{"mcp-refresh-token-ttl-hours", c.MCPRefreshTokenTTLHours},
+	} {
+		if setting.hours < 1 || int64(setting.hours) > int64((1<<63-1)/time.Hour) {
+			return fmt.Errorf("%s must be a positive number of hours representable as a duration; see %s", setting.name, ExperimentsDocumentationURL)
+		}
 	}
 	if c.MCPGithubOAuthClientID == "" || c.MCPGithubOAuthClientSecret == "" {
 		return fmt.Errorf("mcp-enabled requires mcp-gh-oauth-client-id and mcp-gh-oauth-client-secret, which users log in with to get a token; configure them or disable mcp-enabled; see %s", ExperimentsDocumentationURL)

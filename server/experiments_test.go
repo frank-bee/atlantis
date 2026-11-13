@@ -43,6 +43,9 @@ func TestValidateExperiments(t *testing.T) {
 		{name: "MCP requires a token secret", config: mcpConfig(func(c *server.UserConfig) { c.MCPTokenSecret = "" }), err: "mcp-enabled requires mcp-token-secret"},
 		{name: "MCP rejects a short token secret", config: mcpConfig(func(c *server.UserConfig) { c.MCPTokenSecret = token }), err: "mcp-enabled requires mcp-token-secret"},
 		{name: "MCP requires a token lifetime", config: mcpConfig(func(c *server.UserConfig) { c.MCPTokenTTLHours = 0 }), err: "mcp-token-ttl-hours must be at least 1"},
+		{name: "MCP rejects zero access lifetime", config: mcpConfig(func(c *server.UserConfig) { c.MCPAccessTokenTTLHours = 0 }), err: "mcp-access-token-ttl-hours must be a positive"},
+		{name: "MCP rejects negative refresh lifetime", config: mcpConfig(func(c *server.UserConfig) { c.MCPRefreshTokenTTLHours = -1 }), err: "mcp-refresh-token-ttl-hours must be a positive"},
+		{name: "MCP rejects overflowed lifetime", config: mcpConfig(func(c *server.UserConfig) { c.MCPAccessTokenTTLHours = 3000000 }), err: "mcp-access-token-ttl-hours must be a positive"},
 		{name: "MCP requires an OAuth client", config: mcpConfig(func(c *server.UserConfig) { c.MCPGithubOAuthClientSecret = "" }), err: "mcp-enabled requires mcp-gh-oauth-client-id"},
 		{name: "MCP requires GitHub", config: mcpConfig(func(c *server.UserConfig) { c.GithubUser = "" }), err: "mcp-enabled currently supports GitHub only"},
 	}
@@ -70,6 +73,8 @@ func mcpConfig(change func(*server.UserConfig)) server.UserConfig {
 		MCPReadOnly:                true,
 		MCPTokenSecret:             "0123456789abcdef0123456789abcdef",
 		MCPTokenTTLHours:           1,
+		MCPAccessTokenTTLHours:     1,
+		MCPRefreshTokenTTLHours:    720,
 		MCPGithubOAuthClientID:     "id",
 		MCPGithubOAuthClientSecret: "client-secret",
 		GithubUser:                 "user",
@@ -89,6 +94,13 @@ func TestNewServer_MCPIsOffByDefaultAndWiredWhenEnabled(t *testing.T) {
 		{"POST", "/api/mcp"},
 		{"GET", "/auth/github/login"},
 		{"GET", "/auth/github/callback"},
+		{"GET", "/.well-known/oauth-protected-resource"},
+		{"GET", "/.well-known/oauth-protected-resource/api/mcp"},
+		{"GET", "/.well-known/oauth-authorization-server"},
+		{"POST", "/oauth/register"},
+		{"GET", "/oauth/authorize"},
+		{"POST", "/oauth/authorize"},
+		{"POST", "/oauth/token"},
 	}
 
 	// The permission alone activates nothing.
@@ -104,7 +116,7 @@ func TestNewServer_MCPIsOffByDefaultAndWiredWhenEnabled(t *testing.T) {
 	}
 
 	on := mcpConfig(nil)
-	on.DataDir, on.AtlantisURL, on.LockingDBType = t.TempDir(), testAtlantisUrl, testLockingDBType
+	on.DataDir, on.AtlantisURL, on.LockingDBType = t.TempDir(), "https://atlantis.example.com", testLockingDBType
 	on.GithubHostname, on.GithubUser = testGitHubHostName, testGitHubUser
 	s, err = server.NewServer(on, server.Config{AtlantisVersion: testAtlantisVersion})
 	Ok(t, err)

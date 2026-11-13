@@ -6,6 +6,7 @@ package server_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/runatlantis/atlantis/server"
@@ -104,6 +105,24 @@ func TestRequestLogger_WebAuthentication(t *testing.T) {
 		},
 	}
 
+	for _, path := range []string{
+		"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp",
+		"/.well-known/oauth-authorization-server", "/oauth/register", "/oauth/authorize", "/oauth/token",
+	} {
+		tests = append(tests, struct {
+			name, path, user, pass string
+			expStatus              int
+			expNextHandler         bool
+		}{name: path, path: path, expStatus: http.StatusNoContent, expNextHandler: true})
+	}
+	for _, path := range []string{"/oauth/other", "/oauth/token/admin", "/.well-known/other", "/.well-known/oauth-protected-resource/admin"} {
+		tests = append(tests, struct {
+			name, path, user, pass string
+			expStatus              int
+			expNextHandler         bool
+		}{name: path, path: path, expStatus: http.StatusUnauthorized})
+	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
@@ -123,4 +142,17 @@ func TestRequestLogger_WebAuthentication(t *testing.T) {
 			Equals(t, test.expNextHandler, nextHandlerCalled)
 		})
 	}
+}
+
+func TestRequestLogger_OAuthQueriesAreNotLogged(t *testing.T) {
+	logger := logging.NewNoopLogger(t).WithHistory()
+	middleware := server.NewRequestLogger(&server.Server{Logger: logger, WebAuthentication: true})
+	for _, path := range []string{"/auth/github/callback", "/oauth/authorize", "/oauth/token"} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path+"?code=private-code&state=private-state", nil)
+		middleware.ServeHTTP(negroni.NewResponseWriter(recorder), request, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+		Equals(t, http.StatusNoContent, recorder.Code)
+	}
+	Assert(t, !strings.Contains(logger.GetHistory(), "private-"), "OAuth credentials leaked into request logs")
+	Assert(t, strings.Contains(logger.GetHistory(), "/oauth/authorize"), "request path should still be logged")
 }
